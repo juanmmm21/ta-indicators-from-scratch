@@ -1,63 +1,63 @@
 # ta-indicators-from-scratch
 
-Librería de **análisis técnico vectorizado** que implementa indicadores clásicos desde cero con NumPy — sin TA-Lib, pandas-ta ni dependencias de terceros. Cuarto módulo del ecosistema [quant-core-infra](https://github.com/juanmmm21/quant-core-infra).
+**Vectorized technical analysis** library that implements classic indicators from scratch with NumPy — no TA-Lib, pandas-ta, or third-party dependencies. Fourth module of the [quant-core-infra](https://github.com/juanmmm21/quant-core-infra) ecosystem.
 
-Repositorio: [github.com/juanmmm21/ta-indicators-from-scratch](https://github.com/juanmmm21/ta-indicators-from-scratch)
-
----
-
-## Qué es y qué problema resuelve
-
-Las librerías de indicadores (TA-Lib, etc.) son cajas negras: devuelven un número sin que el desarrollador entienda la matemática exacta. En un portafolio cuantitativo eso es un problema: no puedes auditar, optimizar ni explicar las señales.
-
-Este proyecto implementa las fórmulas **explícitamente** con operaciones vectorizadas de NumPy:
-
-- Sabes exactamente qué ocurre en cada ventana de warmup
-- Puedes componer indicadores en pipelines propios
-- El rendimiento se mantiene a nivel C gracias a la vectorización
-
-Consume velas OHLCV de `market-data-lakehouse` y alimenta `alpha-signal-generator`.
+Repository: [github.com/juanmmm21/ta-indicators-from-scratch](https://github.com/juanmmm21/ta-indicators-from-scratch)
 
 ---
 
-## Rol en quant-core-infra
+## What it is and what problem it solves
+
+Indicator libraries (TA-Lib, etc.) are black boxes: they return a number without the developer understanding the exact math. In a quantitative portfolio that's a problem: you can't audit, optimize, or explain the signals.
+
+This project implements the formulas **explicitly** using vectorized NumPy operations:
+
+- You know exactly what happens in each warmup window
+- You can compose indicators into your own pipelines
+- Performance stays at C level thanks to vectorization
+
+Consumes OHLCV candles from `market-data-lakehouse` and feeds `alpha-signal-generator`.
+
+---
+
+## Role in quant-core-infra
 
 ```text
-market-data-lakehouse ──► velas OHLCV ──► ta-indicators-from-scratch ──► indicadores
+market-data-lakehouse ──► OHLCV candles ──► ta-indicators-from-scratch ──► indicators
                                                     │
                                           alpha-signal-generator
 ```
 
-Traduce **precio histórico** en **features estadísticas** que las estrategias evalúan barra a barra.
+Translates **historical price** into **statistical features** that strategies evaluate bar by bar.
 
 ---
 
-## Indicadores soportados
+## Supported indicators
 
-| Indicador | Función | Parámetros por defecto | Fórmula clave |
+| Indicator | Function | Default parameters | Key formula |
 |-----------|---------|------------------------|---------------|
-| **SMA** | Media móvil simple | periodo `20` | Media aritmética de N cierres |
-| **EMA** | Media móvil exponencial | periodo `20` | `α = 2/(N+1)`, semilla SMA |
-| **RSI** | Índice de fuerza relativa | periodo `14` | Suavizado de Wilder sobre gains/losses |
-| **MACD** | Convergencia/divergencia | `12 / 26 / 9` | EMA rápida − EMA lenta, señal EMA |
-| **Bollinger** | Bandas de volatilidad | periodo `20`, σ `2.0` | SMA ± k·σ móvil |
+| **SMA** | Simple moving average | period `20` | Arithmetic mean of N closes |
+| **EMA** | Exponential moving average | period `20` | `α = 2/(N+1)`, SMA seed |
+| **RSI** | Relative strength index | period `14` | Wilder's smoothing over gains/losses |
+| **MACD** | Convergence/divergence | `12 / 26 / 9` | Fast EMA − slow EMA, signal EMA |
+| **Bollinger** | Volatility bands | period `20`, σ `2.0` | Rolling SMA ± k·σ |
 
-Todos devuelven `NaN` durante la ventana de warmup hasta acumular suficientes velas.
-
----
-
-## Cómo funciona
-
-1. **Entrada:** arrays `float64` o JSONL con campos OHLCV.
-2. **Contenedor:** `OhlcvSeries` valida longitudes y valores finitos.
-3. **Cálculo:** cada indicador es una función pura `ndarray → ndarray`.
-4. **Motor:** `TechnicalAnalysisEngine` orquesta todos los indicadores sobre la misma serie.
-5. **Salida:** `IndicatorResult` con arrays alineados por índice de vela.
-6. **CLI:** serializa a JSON con `null` donde hay `NaN`.
+All return `NaN` during the warmup window until enough candles have accumulated.
 
 ---
 
-## Arquitectura
+## How it works
+
+1. **Input:** `float64` arrays or JSONL with OHLCV fields.
+2. **Container:** `OhlcvSeries` validates lengths and finite values.
+3. **Calculation:** each indicator is a pure `ndarray → ndarray` function.
+4. **Engine:** `TechnicalAnalysisEngine` orchestrates all indicators over the same series.
+5. **Output:** `IndicatorResult` with arrays aligned by candle index.
+6. **CLI:** serializes to JSON with `null` wherever there's a `NaN`.
+
+---
+
+## Architecture
 
 ```text
 OHLCV candles (JSONL / arrays)
@@ -68,42 +68,42 @@ OhlcvSeries
         ▼
 TechnicalAnalysisEngine
    ├─ sma / ema / rsi
-   ├─ macd (línea, señal, histograma)
-   └─ bollinger_bands (media, superior, inferior)
+   ├─ macd (line, signal, histogram)
+   └─ bollinger_bands (mean, upper, lower)
         │
         ▼
 IndicatorResult
 ```
 
-### Componentes
+### Components
 
-| Módulo | Responsabilidad |
+| Module | Responsibility |
 |--------|----------------|
-| `series.py` | Contenedor OHLCV y parsing de records |
-| `indicators/sma.py` | SMA por convolución + std móvil |
-| `indicators/ema.py` | EMA con semilla SMA |
-| `indicators/rsi.py` | RSI Wilder |
-| `indicators/macd.py` | Stack MACD completo |
-| `indicators/bollinger.py` | Bandas alrededor de SMA |
-| `engine.py` | Orquestación multi-indicador |
-| `pipeline.py` | Ingesta JSONL + serialización |
+| `series.py` | OHLCV container and record parsing |
+| `indicators/sma.py` | SMA via convolution + rolling std |
+| `indicators/ema.py` | EMA with SMA seed |
+| `indicators/rsi.py` | Wilder RSI |
+| `indicators/macd.py` | Full MACD stack |
+| `indicators/bollinger.py` | Bands around SMA |
+| `engine.py` | Multi-indicator orchestration |
+| `pipeline.py` | JSONL ingestion + serialization |
 
-### Decisiones técnicas
+### Technical decisions
 
-- **float64** para matemática estadística (aceptable para TA pura según reglas del ecosistema)
-- **Sin pandas / TA-Lib** — dependencia mínima (solo NumPy)
-- **NaN explícitos** — las estrategias downstream pueden filtrar warmup
-- **MACD:** la señal se calcula solo sobre la porción finita de la línea MACD
+- **float64** for statistical math (acceptable for pure TA per ecosystem rules)
+- **No pandas / TA-Lib** — minimal dependency (NumPy only)
+- **Explicit NaN** — downstream strategies can filter warmup
+- **MACD:** the signal is calculated only over the finite portion of the MACD line
 
 ---
 
-## Requisitos
+## Requirements
 
 - Python **3.11+**
 
 ---
 
-## Instalación
+## Installation
 
 ```bash
 cd ta-indicators-from-scratch
@@ -114,15 +114,15 @@ pip install -e ".[dev]"
 
 ---
 
-## Uso CLI
+## CLI usage
 
 ```bash
-# Todos los indicadores
+# All indicators
 ta-indicators-from-scratch compute \
   --input samples/btcusdt_1m_candles.jsonl \
   --indicator all
 
-# Solo RSI con periodo custom
+# RSI only with custom period
 ta-indicators-from-scratch compute \
   --input samples/btcusdt_1m_candles.jsonl \
   --indicator rsi \
@@ -130,9 +130,9 @@ ta-indicators-from-scratch compute \
   --output indicators.json
 ```
 
-### Parámetros configurables
+### Configurable parameters
 
-| Flag | Indicador | Default |
+| Flag | Indicator | Default |
 |------|-----------|---------|
 | `--sma-period` | SMA | 20 |
 | `--ema-period` | EMA | 20 |
@@ -142,7 +142,7 @@ ta-indicators-from-scratch compute \
 
 ---
 
-## Formato JSONL de velas
+## Candle JSONL format
 
 ```json
 {
@@ -156,7 +156,7 @@ ta-indicators-from-scratch compute \
 
 ---
 
-## Uso programático
+## Programmatic usage
 
 ```python
 import numpy as np
@@ -175,14 +175,14 @@ series = OhlcvSeries.from_arrays(
 engine = TechnicalAnalysisEngine()
 results = engine.compute_all(series)
 
-# Acceso directo a funciones individuales
+# Direct access to individual functions
 rsi_values = rsi(series.close, period=14)
 sma_values = sma(series.close, period=20)
 ```
 
 ---
 
-## Desarrollo
+## Development
 
 ```bash
 pytest -q
@@ -194,12 +194,12 @@ mypy src
 
 ## Roadmap
 
-- [ ] Indicadores adicionales (ATR, Stochastic, VWAP)
-- [ ] Export Parquet de series de indicadores
-- [ ] Pipeline directo desde DuckDB del lakehouse
+- [ ] Additional indicators (ATR, Stochastic, VWAP)
+- [ ] Parquet export of indicator series
+- [ ] Direct pipeline from the lakehouse's DuckDB
 
 ---
 
-## Licencia
+## License
 
 MIT
